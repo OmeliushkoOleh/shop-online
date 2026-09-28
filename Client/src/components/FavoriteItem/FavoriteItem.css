@@ -1,0 +1,26 @@
+.favorite-item:hover {
+  box-shadow: 0 0 5px black;
+}
+.favorite-item {
+  height: 60px;
+
+  margin-top: 15px;
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+  align-items: center;
+  align-content: center;
+}
+.favorite-item-img {
+  img {
+    width: 50px;
+    height: 50px;
+  }
+}
+.favorite-item-info {
+  margin-left: 10px;
+  width: 300px;
+}
+.favorite-item-buttons {
+  display: flex;
+}

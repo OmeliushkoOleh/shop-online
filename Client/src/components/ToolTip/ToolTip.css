@@ -1,0 +1,36 @@
+/* Родителю ОБЯЗАТЕЛЬНО задаем relative, чтобы стикер не улетал */
+.tooltip-wrapper {
+  display: inline-block;
+  position: relative !important; /* !important защитит от перебивания другими стилями */
+}
+
+/* Сам стикер строго под элементом */
+.tooltip-tip {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px); /* Отступ вниз от элемента */
+  transform: translateX(-50%); /* Выравнивание ровно по центру */
+
+  width: max-content; /* Чтобы ширина подстраивалась под текст */
+  background: #222;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  z-index: 999;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Стрелочка ровно по центру верхней границы стикера */
+.tooltip-tip::after {
+  content: "";
+  position: absolute;
+  bottom: 100%; /* Сажаем на верхнюю рамку стикера */
+  left: 50%;
+  transform: translateX(-50%); /* Центрируем саму стрелку */
+
+  border-width: 5px;
+  border-style: solid;
+  /* Закрашиваем только нижнюю часть, чтобы стрелка смотрела вверх */
+  border-color: transparent transparent #222 transparent;
+}

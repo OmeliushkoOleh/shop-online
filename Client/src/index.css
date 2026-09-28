@@ -1,0 +1,65 @@
+@import "bootstrap-icons/font/bootstrap-icons.css";
+
+:root {
+  /* --green_1: #00ff00;
+    --green_2: #00b67a;
+    --green_3: #00d378;
+    --green_4: #00c46b;
+    --green_5: #16c784;
+    --blue_1: #02b2e4;
+    --blue_2: #61dafb;
+    --blue_3: #6188ff;
+    --grey_1: #ddddde;
+    --grey_2: #727272;
+    --grey_3: #787878;
+    --grey_4: #646b80;
+    --grey_5: #383838;
+    --grey_6: #2b2b2b;
+    --black_1: #212121;
+    --black_2: #1c1d24;
+    --black_3: #1c1e26;
+    --black_4: #202020;
+    --black_5: #121212; */
+  --bg-primary: #212121;
+  --bg-secondary: #171717;
+  --bg-tertiary: #2f2f2f;
+
+  --border: #424242;
+
+  --text-primary: #ececec;
+  --text-secondary: #b4b4b4;
+  --text-muted: #8e8e8e;
+
+  --accent: #10a37f;
+  --accent-hover: #2ac99a;
+
+  --hover: #3a3a3a;
+
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+Body {
+  font-size: 1em;
+}
+::-webkit-scrollbar {
+  display: none;
+}
+Body.modal-open {
+  overflow: hidden !important;
+}
+Body.dark {
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+}
+
+Body.light {
+  color: black;
+}
