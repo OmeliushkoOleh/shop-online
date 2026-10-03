@@ -12,9 +12,11 @@ export const CustomDropdown = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
 
   const handleCategoryClick = (cat: string) => {
+    localStorage.setItem("currentPage", 1);
+
     changeCategory(cat);
     setSelectedCategory(cat);
-    navigate("/products");
+    navigate("/products/page1");
     setIsOpen(false);
   };
 
