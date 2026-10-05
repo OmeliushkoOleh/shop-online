@@ -37,7 +37,7 @@ function App() {
       <main className="main-content">
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/products/:page" element={<ProductsPage />} />
+          <Route path="/products" element={<ProductsPage />} />
           <Route path="/product/:id" element={<ProductPage />} />
           <Route path="/favorite" element={<FavoritePage />} />
           <Route path="/cart" element={<CartPage />} />

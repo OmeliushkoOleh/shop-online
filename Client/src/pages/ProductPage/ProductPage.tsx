@@ -52,13 +52,17 @@ const ProductPage = () => {
                 )}
               </div>
               <div className="buttons">
-                <button
-                  onClick={() => {
-                    addNewProductToCart(productInfo.id);
-                  }}
-                >
-                  To Cart
-                </button>
+                {productInfo.countInStock && productInfo.countInStock > 0 ? (
+                  <button
+                    onClick={() => {
+                      addNewProductToCart(productInfo.id);
+                    }}
+                  >
+                    To Cart
+                  </button>
+                ) : (
+                  ""
+                )}
                 <button
                   onClick={(e) => {
                     addToFavorite(productInfo.id);

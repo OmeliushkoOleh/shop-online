@@ -67,7 +67,12 @@ export const RegisterPage = () => {
 
   // 3. Функция отправки (вызовется только если валидация пройдена)
 
-  const onSubmit = async (data) => {
+  const onSubmit = async (data: {
+    email: string;
+    password: string;
+    phone: string;
+    name: string;
+  }) => {
     try {
       const res = await signUp(
         data.email,
@@ -78,8 +83,9 @@ export const RegisterPage = () => {
       console.log("Данные созданного пользователя:", res.user);
 
       navigate("/");
-    } catch (err: any) {
-      console.error("Ошибка при регистрации:", err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Неизвестная ошибка";
+      console.error("Ошибка при регистрации:", message);
     }
   };
 

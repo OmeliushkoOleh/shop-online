@@ -49,50 +49,39 @@ const ProductCard: React.FC<IMyComponentProps> = ({ product }) => {
     >
       <div className="product-img">
         <img src={product.imageUrl}></img>
+
         <div className="button-container">
+          {product.countInStock && product.countInStock > 0 ? (
+            <button
+              className="product-card-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                addNewProductToCart(product.id);
+              }}
+            >
+              <Cart
+                size={BootsTrapButtonIconSize}
+                style={{ stroke: colorForCart, strokeWidth: 0.7 }}
+                color={colorForCart}
+              />
+            </button>
+          ) : (
+            <div className="out-of-stock"> Out Of Stock</div>
+          )}
+
           <button
             className="product-card-button"
             onClick={(e) => {
               e.stopPropagation();
-              addNewProductToCart(product.id);
+              addToFavorite(product.id);
             }}
           >
-            <Cart
+            <Heart
               size={BootsTrapButtonIconSize}
-              style={{ stroke: colorForCart, strokeWidth: 0.7 }}
-              color={colorForCart}
+              style={{ stroke: colorForFavorite, strokeWidth: 0.8 }}
+              color={colorForFavorite}
             />
           </button>
-
-          {!location.pathname.includes("/favorite") ? (
-            <button
-              className="product-card-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                addToFavorite(product.id);
-              }}
-            >
-              <Heart
-                size={BootsTrapButtonIconSize}
-                style={{ stroke: colorForFavorite, strokeWidth: 0.8 }}
-                color={colorForFavorite}
-              />
-            </button>
-          ) : (
-            <button
-              className="product-card-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                deleteFromFavorite(product.id);
-              }}
-            >
-              <Trash
-                size={BootsTrapButtonIconSize}
-                style={{ stroke: colorForFavorite, strokeWidth: 0.8 }}
-                color={colorForFavorite}
-              />
-            </button>
-          )}
         </div>
       </div>
       <div className="product-card-info">

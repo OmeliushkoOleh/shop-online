@@ -39,14 +39,15 @@ const LoginPage = () => {
 
   const signIn = useAuthStore((state) => state.signIn);
 
-  const onSubmit = async (data) => {
+  const onSubmit = async (data: { email: string; password: string }) => {
     try {
       const res = await signIn(data.email, data.password);
       console.log("успешный вход:", res.user);
 
       navigate("/");
-    } catch (err) {
-      console.error("Ошибка входа:", err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Неизвестная ошибка";
+      console.error("Ошибка входа:", message);
     }
   };
 

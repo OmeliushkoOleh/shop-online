@@ -1,20 +1,101 @@
 import { create } from "zustand";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type Session, type User } from "@supabase/supabase-js";
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+type UserData = User;
+
+type AuthState = {
+  user: UserData | null;
+  role: string;
+  loading: boolean;
+  error: string | null;
+  signUp: (
+    email: string,
+    password: string,
+    phone: string,
+    name: string,
+  ) => Promise<{
+    user: User | null;
+    session: Session | null;
+    [key: string]: unknown;
+  }>;
+  signIn: (
+    email: string,
+    password: string,
+  ) => Promise<{
+    user: User | null;
+    session: Session | null;
+    [key: string]: unknown;
+  }>;
+  signOut: () => Promise<void>;
+  initializeAuth: () => Promise<void>;
+  changeName: (newName: string) => Promise<UserData>;
+  changePhone: (newPhone: string) => Promise<UserData>;
+};
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: { persistSession: true, autoRefreshToken: true },
 });
-export const useAuthStore = create((set) => ({
+
+const syncProfile = async (
+  userId: string,
+  profileData: {
+    name?: string;
+    phone?: string;
+    role?: string;
+  },
+) => {
+  const { data: existingProfile, error: selectError } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (selectError && selectError.code !== "PGRST116") {
+    throw selectError;
+  }
+
+  if (existingProfile) {
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        ...profileData,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    if (error) {
+      throw error;
+    }
+
+    return;
+  }
+
+  const { error } = await supabase.from("profiles").insert([
+    {
+      id: userId,
+      updated_at: new Date().toISOString(),
+      ...profileData,
+    },
+  ]);
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
+  role: "user",
   loading: true,
   error: null,
 
   signUp: async (
     email: string,
     password: string,
-    phone: number,
+    phone: string,
     name: string,
   ) => {
     set({ loading: true, error: null });
@@ -24,8 +105,8 @@ export const useAuthStore = create((set) => ({
       password,
       options: {
         data: {
-          name: name,
-          phone: phone,
+          name,
+          phone,
         },
       },
     });
@@ -35,8 +116,30 @@ export const useAuthStore = create((set) => ({
       throw error;
     }
 
+    if (!data.user) {
+      set({ error: "Пользователь не создан", loading: false });
+      throw new Error("Пользователь не создан");
+    }
+
+    try {
+      await syncProfile(data.user.id, {
+        name,
+        phone,
+        role: "user",
+      });
+    } catch (profileError) {
+      set({
+        error:
+          profileError instanceof Error
+            ? profileError.message
+            : "Не удалось обновить профиль",
+        loading: false,
+      });
+      throw profileError;
+    }
+
     set({ user: data.user, loading: false });
-    localStorage.setItem("userId", data?.user!.id);
+    localStorage.setItem("userId", data.user.id);
     return data;
   },
 
@@ -52,25 +155,27 @@ export const useAuthStore = create((set) => ({
       throw error;
     }
 
-    // Сразу после успешного входа берём роль юзера из таблицы profiles
+    if (!data.user) {
+      set({ error: "Пользователь не найден", loading: false });
+      throw new Error("Пользователь не найден");
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", data.user.id)
       .single();
 
-    // Сохраняем в Zustand и пользователя, и его кастомную роль
     set({
       user: data.user,
       role: profile?.role ?? "user",
       loading: false,
     });
-    // ----------------------------
-    localStorage.setItem("userId", data?.user!.id);
-    return data; // Возвращаем данные для компонента формы
+
+    localStorage.setItem("userId", data.user.id);
+    return data;
   },
 
-  // Метод для выхода
   signOut: async () => {
     set({ loading: true });
     const { error } = await supabase.auth.signOut();
@@ -78,24 +183,21 @@ export const useAuthStore = create((set) => ({
       set({ error: error.message, loading: false });
       throw error;
     }
-    set({ user: null, loading: false });
+    set({ user: null, role: "user", loading: false });
     localStorage.setItem("userId", "null");
     localStorage.setItem("shopping-cart-storage", "null");
     localStorage.setItem("currentFavorite", "null");
   },
 
-  // Инициализация слушателя сессии (вызывается один раз при старте приложения)
   initializeAuth: async () => {
     set({ loading: true });
 
-    // 1. Проверяем, есть ли уже сохраненная сессия в браузере
     const {
       data: { session },
     } = await supabase.auth.getSession();
     const currentUser = session?.user ?? null;
 
     if (currentUser) {
-      // ЕСЛИ ПОЛЬЗОВАТЕЛЬ ЕСТЬ -> запрашиваем его роль из таблицы profiles
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
@@ -104,21 +206,17 @@ export const useAuthStore = create((set) => ({
 
       set({
         user: currentUser,
-        role: profile?.role ?? "user", // сохраняем роль в Zustand
+        role: profile?.role ?? "user",
         loading: false,
       });
     } else {
-      // Если сессии нет, сбрасываем всё в дефолт
       set({ user: null, role: "user", loading: false });
     }
 
-    // 2. Подписываемся на любые изменения (вход, выход, авто-обновление токена)
     supabase.auth.onAuthStateChange(async (_event, session) => {
       const userChange = session?.user ?? null;
 
       if (userChange) {
-        // Каждый раз, когда состояние меняется (например, авто-обновление токена через полгода)
-        // мы снова подтягиваем актуальную роль из базы данных
         const { data: profile } = await supabase
           .from("profiles")
           .select("role")
@@ -134,5 +232,95 @@ export const useAuthStore = create((set) => ({
         set({ user: null, role: "user", loading: false });
       }
     });
+  },
+
+  changeName: async (newName: string) => {
+    const currentUser = get().user;
+    if (!currentUser) {
+      throw new Error("Пользователь не авторизован");
+    }
+
+    set({ loading: true, error: null });
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: { name: newName },
+    });
+
+    if (error) {
+      set({ error: error.message, loading: false });
+      throw error;
+    }
+
+    if (!data.user) {
+      set({ error: "Профиль пользователя не найден", loading: false });
+      throw new Error("Профиль пользователя не найден");
+    }
+
+    try {
+      await syncProfile(data.user.id, {
+        name: newName,
+        phone:
+          (data.user.user_metadata.phone as string | undefined) ??
+          currentUser.user_metadata?.phone,
+        role: get().role ?? "user",
+      });
+    } catch (profileError) {
+      set({
+        error:
+          profileError instanceof Error
+            ? profileError.message
+            : "Не удалось обновить профиль",
+        loading: false,
+      });
+      throw profileError;
+    }
+
+    set({ user: data.user, loading: false });
+    return data.user;
+  },
+
+  changePhone: async (newPhone: string) => {
+    const currentUser = get().user;
+    if (!currentUser) {
+      throw new Error("Пользователь не авторизован");
+    }
+
+    set({ loading: true, error: null });
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: { phone: newPhone },
+    });
+
+    if (error) {
+      set({ error: error.message, loading: false });
+      throw error;
+    }
+
+    if (!data.user) {
+      set({ error: "Профиль пользователя не найден", loading: false });
+      throw new Error("Профиль пользователя не найден");
+    }
+
+    try {
+      await syncProfile(data.user.id, {
+        name:
+          (data.user.user_metadata.name as string | undefined) ??
+          currentUser.user_metadata?.name,
+        phone: newPhone,
+        role: get().role ?? "user",
+      });
+    } catch (profileError) {
+      set({
+        error:
+          profileError instanceof Error
+            ? profileError.message
+            : "Не удалось обновить профиль",
+        loading: false,
+      });
+      throw profileError;
+    }
+
+    set({ user: data.user, loading: false });
+    return data.user;
   },
 }));

@@ -113,7 +113,9 @@ const TopBar = () => {
       </div>
       <div className="top-bar-item">
         <div>
-          <CustomDropdown />
+          <Link className="link" to="/products">
+            Go To Products
+          </Link>
         </div>
 
         <div></div>

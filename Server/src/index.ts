@@ -41,16 +41,9 @@ app.get("/get_initial_products", async (req, res) => {
   }
 });
 
-app.get("/get_products_by_category", async (req, res) => {
+app.get("/get_all_products", async (req, res) => {
   try {
-    const { category } = req.query;
-    let query;
-    if (category === "allProducts") {
-      query = supabase.from("products").select("*");
-    } else {
-      query = supabase.from("products").select("*").eq("category", category);
-    }
-    const { data, error } = (await query) as {
+    const { data, error } = (await supabase.from("products").select("*")) as {
       data: IProduct[] | null;
       error: any;
     };
