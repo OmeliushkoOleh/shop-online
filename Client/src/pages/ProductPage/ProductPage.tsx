@@ -31,7 +31,7 @@ const ProductPage = () => {
             <div>
               <img src={productInfo.imageUrl}></img>
             </div>
-            <div>
+            <div className="info">
               <div className="description">
                 <h2>{productInfo.description}</h2>
               </div>

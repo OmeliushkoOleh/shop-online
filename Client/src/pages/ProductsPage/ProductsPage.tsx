@@ -6,20 +6,45 @@ import { useCategoryStore } from "../../store/useCategoryStore";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
 
+const roundToCents = (value: number) => Math.round(value * 100) / 100;
+
+const getDiscountedPrice = (price: number, discount: number) => {
+  const priceInCents = Math.round(price * 100);
+  const discountedPriceInCents = Math.round(
+    (priceInCents * (100 - discount)) / 100,
+  );
+  return discountedPriceInCents / 100;
+};
+
+const getInitialPage = () => {
+  const storedPage = localStorage.getItem("currentPage");
+  const page = Number(storedPage);
+  return storedPage &&
+    storedPage !== "null" &&
+    Number.isInteger(page) &&
+    page > 0
+    ? page
+    : 1;
+};
+
 const ProductsPage = () => {
   const [allProducts, setAllProducts] = useState<IProduct[]>([]);
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>(
-    localStorage.getItem("currentCategory") || "ALL",
+    localStorage.getItem("currentCategory") &&
+      localStorage.getItem("currentCategory") !== "null"
+      ? localStorage.getItem("currentCategory")!
+      : "All",
   );
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   const [sortType, setSortType] = useState<string>(
-    localStorage.getItem("sortType") || "default",
+    localStorage.getItem("sortType") &&
+      localStorage.getItem("sortType") !== "null"
+      ? localStorage.getItem("sortType")!
+      : "default",
   );
-  const [currentPage, setCurrentPage] = useState<number>(
-    Number(localStorage.getItem("currentPage")) || 1,
-  );
+  const [currentPage, setCurrentPage] = useState<number>(getInitialPage);
   const [minLimit, setMinLimit] = useState<number>(0);
   const [maxLimit, setMaxLimit] = useState<number>(10000);
   const [range, setRange] = useState<number[]>([minLimit, maxLimit]);
@@ -36,15 +61,11 @@ const ProductsPage = () => {
     }
     let newPage;
     if (arrow === "prev") {
-      if (Number(localStorage.getItem("currentPage")) - 1 === 0) {
-        return;
-      }
-      newPage = Number(localStorage.getItem("currentPage")) - 1;
+      if (currentPage <= 1) return;
+      newPage = currentPage - 1;
     } else if (arrow === "next") {
-      if (Number(localStorage.getItem("currentPage")) + 1 > totalPages) {
-        return;
-      }
-      newPage = Number(localStorage.getItem("currentPage")) + 1;
+      if (currentPage >= totalPages) return;
+      newPage = currentPage + 1;
     } else {
       newPage = page;
     }
@@ -74,7 +95,6 @@ const ProductsPage = () => {
   // }, [range]);
 
   const createPagination = () => {
-    const currentPage = Number(localStorage.getItem("currentPage")) || 1;
     const arr: (number | string)[] = [];
     for (let i = 1; i <= totalPages; i++) {
       arr.push(i);
@@ -99,15 +119,18 @@ const ProductsPage = () => {
         .includes(searchQuery.toLowerCase());
       const matchesCategory =
         selectedCategory === "All" || product.category === selectedCategory;
+      const discountedPrice = getDiscountedPrice(
+        product.price,
+        product.discount || 0,
+      );
       const matchesPrice =
-        product.price * (1 - (product.discount || 0) / 100) >= filterRange[0] &&
-        product.price * (1 - (product.discount || 0) / 100) <= filterRange[1];
+        discountedPrice >= filterRange[0] && discountedPrice <= filterRange[1];
       return matchesSearch && matchesCategory && matchesPrice;
     });
 
     return [...filtered].sort((a, b) => {
-      const priceWithDiscountA = a.price * (1 - (a.discount || 0) / 100);
-      const priceWithDiscountB = b.price * (1 - (b.discount || 0) / 100);
+      const priceWithDiscountA = getDiscountedPrice(a.price, a.discount || 0);
+      const priceWithDiscountB = getDiscountedPrice(b.price, b.discount || 0);
       if (sortType === "price-asc") {
         localStorage.setItem("sortType", "price-asc");
         return priceWithDiscountA - priceWithDiscountB;
@@ -122,20 +145,42 @@ const ProductsPage = () => {
 
   useEffect(() => {
     if (allProducts.length === 0) return;
-    const prices = allProducts.map(
-      (product) => product.price * (1 - (product.discount || 0) / 100),
+    const prices = allProducts.map((product) =>
+      getDiscountedPrice(product.price, product.discount || 0),
     );
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMinLimit(minPrice);
     setMaxLimit(maxPrice);
     const storedRange = localStorage.getItem("range");
-    const rangeFromLocalStorage = storedRange
-      ? JSON.parse(storedRange)
-      : { min: 0, max: 10000 };
+    let rangeFromLocalStorage: { min?: number; max?: number } | null = null;
+    if (storedRange && storedRange !== "null") {
+      try {
+        rangeFromLocalStorage = JSON.parse(storedRange);
+      } catch {
+        rangeFromLocalStorage = null;
+      }
+    }
 
-    const minStored = Number(rangeFromLocalStorage.min ?? 0);
-    const maxStored = Number(rangeFromLocalStorage.max ?? 10000);
+    const minStored = rangeFromLocalStorage
+      ? Math.max(
+          minPrice,
+          Math.min(
+            maxPrice,
+            roundToCents(Number(rangeFromLocalStorage.min ?? minPrice)),
+          ),
+        )
+      : minPrice;
+    const maxStored = rangeFromLocalStorage
+      ? Math.max(
+          minStored,
+          Math.min(
+            maxPrice,
+            roundToCents(Number(rangeFromLocalStorage.max ?? maxPrice)),
+          ),
+        )
+      : maxPrice;
 
     setFilterRange([minStored, maxStored]);
     setRange([minStored, maxStored]);
@@ -151,10 +196,11 @@ const ProductsPage = () => {
 
   const handleChangePriceRange = (newRange: number | number[]): void => {
     if (Array.isArray(newRange)) {
-      setRange(newRange);
+      const normalizedRange = newRange.map(roundToCents);
+      setRange(normalizedRange);
       const rangeForLocalStorage = {
-        min: newRange[0],
-        max: newRange[1],
+        min: normalizedRange[0],
+        max: normalizedRange[1],
       };
       localStorage.setItem("range", JSON.stringify(rangeForLocalStorage));
     }
@@ -170,10 +216,25 @@ const ProductsPage = () => {
     handlePage(1);
   };
 
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setSelectedCategory("All");
+    setSortType("default");
+    setCurrentPage(1);
+    setRange([minLimit, maxLimit]);
+    setFilterRange([minLimit, maxLimit]);
+
+    localStorage.setItem("currentCategory", "null");
+    localStorage.setItem("sortType", "null");
+    localStorage.setItem("currentPage", "null");
+    localStorage.setItem("range", "null");
+  };
+
   return (
     <div className="product-page">
       <div className="product-page-left-bar">
-        <div
+        <button
+          type="button"
           className="sort-button"
           onClick={() => {
             handlePage(1);
@@ -181,8 +242,9 @@ const ProductsPage = () => {
           }}
         >
           From cheap to expensive
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           className="sort-button"
           onClick={() => {
             handlePage(1);
@@ -190,13 +252,14 @@ const ProductsPage = () => {
           }}
         >
           From expensive to cheap
-        </div>
+        </button>
         <div className="filter-price">
-          <div style={{ width: 130, marginLeft: "15px" }}>
+          <div className="price-range-control">
+            <label className="sidebar-filter-label">Price range</label>
             <div className="price-spans">
-              <span>{range[0]}</span>
+              <span>{Math.round(range[0])}</span>
               <span>-</span>
-              <span>{range[1]}</span>
+              <span>{Math.round(range[1])}</span>
             </div>
             <Slider
               range
@@ -211,7 +274,9 @@ const ProductsPage = () => {
           </div>
         </div>
         <div className="filter-category">
-          <label htmlFor="category">Category: </label>
+          <label className="sidebar-filter-label" htmlFor="category">
+            Category
+          </label>
           <select
             id="category"
             value={selectedCategory}
@@ -227,6 +292,18 @@ const ProductsPage = () => {
             })}
           </select>
         </div>
+        <input
+          className="product-search-input"
+          id="product-search-input"
+          type="search"
+          placeholder="Search products"
+          aria-label="Search products"
+          value={searchQuery}
+          onChange={handleSearchChange}
+        />
+        <button className="clear-filters-button" onClick={clearAllFilters}>
+          Clear all filters
+        </button>
       </div>
       <div className="products-container">
         <div className="product-card-container">
@@ -251,7 +328,7 @@ const ProductsPage = () => {
 
             {createPagination().map((item) => {
               let className = "pagination-item";
-              if (Number(localStorage.getItem("currentPage")) === item.val) {
+              if (currentPage === item.val) {
                 className = "pagination-item current-page";
               }
               return (

@@ -12,6 +12,7 @@ import {
   Heart,
   Cart,
   XLg,
+  PersonLock,
 } from "react-bootstrap-icons";
 
 import { useState } from "react";
@@ -23,6 +24,8 @@ import { useCartStore } from "../../store/useCartStore";
 import { useFavoriteStore } from "../../store/useFavoriteStore";
 
 const TopBar = () => {
+  const role = useAuthStore((state) => state.role);
+
   const cart = useCartStore((state) => state.cartItems);
   const favorite = useFavoriteStore((state) => state.favorite);
   const [isOpen, setIsOpen] = useState(false);
@@ -74,6 +77,16 @@ const TopBar = () => {
           </Link>
           <div className="my-tooltip">{t("home")}</div>
         </div>
+        {role === "admin" || role === "superAdmin" ? (
+          <div className="tooltip-wrapper">
+            <Link className="link" to="/admin">
+              <PersonLock size={BootsTrapIconSize} color="currentColor" />
+            </Link>
+            <div className="my-tooltip">{t("Admin Panel")}</div>
+          </div>
+        ) : (
+          ""
+        )}
       </div>
       <div className="top-bar-item">
         <div className="tooltip-wrapper">

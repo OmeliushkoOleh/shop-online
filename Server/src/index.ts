@@ -2,12 +2,25 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
+import { randomUUID } from "crypto";
+import multer from "multer";
 import { supabase } from "./supabaseClient";
 import { IProduct } from "./types";
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT;
+const uploadProductImage = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    if (!file.mimetype.startsWith("image/")) {
+      callback(new Error("Файл должен быть изображением"));
+      return;
+    }
+    callback(null, true);
+  },
+});
 app.use(cors());
 app.use(express.json());
 
@@ -24,6 +37,298 @@ app.get("/get_categories", async (req, res) => {
   } catch (error) {
     console.error("Ошибка при получении категорий:", error);
     res.status(500).json({ error: "Не удалось получить категории" });
+  }
+});
+
+app.post(
+  "/add_product",
+  uploadProductImage.single("image"),
+  async (req, res) => {
+    const authorization = req.header("Authorization");
+    const accessToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length)
+      : null;
+
+    if (!accessToken) {
+      return res.status(401).json({ error: "Требуется авторизация" });
+    }
+
+    const { data: authData, error: authError } =
+      await supabase.auth.getUser(accessToken);
+
+    if (authError || !authData.user) {
+      return res.status(401).json({ error: "Недействительная сессия" });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .single();
+
+    if (profileError || profile?.role !== "admin") {
+      return res.status(403).json({ error: "Недостаточно прав" });
+    }
+
+    const { title, description, price, discount, category, countInStock } =
+      req.body;
+    const image = req.file;
+
+    if (!title?.trim() || !category?.trim() || !image) {
+      return res
+        .status(400)
+        .json({ error: "Заполните обязательные поля и выберите изображение" });
+    }
+
+    const extension = path.extname(image.originalname).toLowerCase();
+    const imagePath = `products/${randomUUID()}${extension}`;
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from("products_img")
+        .upload(imagePath, image.buffer, {
+          contentType: image.mimetype,
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("products_img").getPublicUrl(imagePath);
+
+      const { data, error: insertError } = await supabase
+        .from("products")
+        .insert({
+          title: title.trim(),
+          description: description?.trim() ?? "",
+          price: Number(price),
+          discount: Number(discount),
+          category: category.trim(),
+          countInStock: Number(countInStock),
+          imageUrl: publicUrl,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        await supabase.storage.from("products_img").remove([imagePath]);
+        throw insertError;
+      }
+
+      return res.status(201).json(data);
+    } catch (error) {
+      console.error("Ошибка при создании товара:", error);
+      return res.status(500).json({ error: "Не удалось добавить товар" });
+    }
+  },
+);
+
+app.put(
+  "/update_product",
+  uploadProductImage.single("image"),
+  async (req, res) => {
+    const authorization = req.header("Authorization");
+    const accessToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length)
+      : null;
+
+    if (!accessToken) {
+      return res.status(401).json({ error: "Требуется авторизация" });
+    }
+
+    const { data: authData, error: authError } =
+      await supabase.auth.getUser(accessToken);
+
+    if (authError || !authData.user) {
+      return res.status(401).json({ error: "Недействительная сессия" });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .single();
+
+    if (profileError || profile?.role !== "admin") {
+      return res.status(403).json({ error: "Недостаточно прав" });
+    }
+
+    const productId = Number(req.body.productId);
+    const { title, description, price, discount, category, countInStock } =
+      req.body;
+
+    if (
+      !Number.isInteger(productId) ||
+      productId <= 0 ||
+      !title?.trim() ||
+      !category?.trim()
+    ) {
+      return res.status(400).json({ error: "Проверьте данные товара" });
+    }
+
+    let newImagePath: string | null = null;
+
+    try {
+      const { data: currentProduct, error: currentProductError } =
+        await supabase
+          .from("products")
+          .select("id, imageUrl")
+          .eq("id", productId)
+          .maybeSingle();
+
+      if (currentProductError) throw currentProductError;
+      if (!currentProduct) {
+        return res.status(404).json({ error: "Товар не найден" });
+      }
+
+      let imageUrl = currentProduct.imageUrl;
+      if (req.file) {
+        const extension = path.extname(req.file.originalname).toLowerCase();
+        newImagePath = `products/${randomUUID()}${extension}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("products_img")
+          .upload(newImagePath, req.file.buffer, {
+            contentType: req.file.mimetype,
+            cacheControl: "3600",
+            upsert: false,
+          });
+        if (uploadError) throw uploadError;
+
+        imageUrl = supabase.storage
+          .from("products_img")
+          .getPublicUrl(newImagePath).data.publicUrl;
+      }
+
+      const { data: updatedProduct, error: updateError } = await supabase
+        .from("products")
+        .update({
+          title: title.trim(),
+          description: description?.trim() ?? "",
+          price: Number(price),
+          discount: Number(discount),
+          category: category.trim(),
+          countInStock: Number(countInStock),
+          imageUrl,
+        })
+        .eq("id", productId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      if (newImagePath) {
+        const storageMarker = "/storage/v1/object/public/products_img/";
+        const markerIndex = currentProduct.imageUrl.indexOf(storageMarker);
+        if (markerIndex >= 0) {
+          const oldImagePath = decodeURIComponent(
+            currentProduct.imageUrl.slice(markerIndex + storageMarker.length),
+          );
+          const { error: removeError } = await supabase.storage
+            .from("products_img")
+            .remove([oldImagePath]);
+          if (removeError) {
+            console.error(
+              "Не удалось удалить старое изображение:",
+              removeError,
+            );
+          }
+        }
+      }
+
+      return res.json(updatedProduct);
+    } catch (error) {
+      if (newImagePath) {
+        await supabase.storage.from("products_img").remove([newImagePath]);
+      }
+      console.error("Ошибка изменения товара:", error);
+      return res.status(500).json({ error: "Не удалось сохранить товар" });
+    }
+  },
+);
+
+app.post("/delete_product", async (req, res) => {
+  const authorization = req.header("Authorization");
+  const accessToken = authorization?.startsWith("Bearer ")
+    ? authorization.slice("Bearer ".length)
+    : null;
+
+  if (!accessToken) {
+    return res.status(401).json({ error: "Требуется авторизация" });
+  }
+
+  const { data: authData, error: authError } =
+    await supabase.auth.getUser(accessToken);
+
+  if (authError || !authData.user) {
+    return res.status(401).json({ error: "Недействительная сессия" });
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", authData.user.id)
+    .single();
+
+  if (profileError || profile?.role !== "admin") {
+    return res.status(403).json({ error: "Недостаточно прав" });
+  }
+
+  const productId = Number(req.body.productId);
+  if (!Number.isInteger(productId) || productId <= 0) {
+    return res.status(400).json({ error: "Некорректный ID товара" });
+  }
+
+  try {
+    const { data: product, error: productError } = await supabase
+      .from("products")
+      .select("id, imageUrl")
+      .eq("id", productId)
+      .maybeSingle();
+
+    if (productError) throw productError;
+    if (!product) {
+      return res.status(404).json({ error: "Товар не найден" });
+    }
+
+    const { error: cartError } = await supabase
+      .from("cart_items")
+      .delete()
+      .eq("product_id", productId);
+    if (cartError) throw cartError;
+
+    const { error: favoritesError } = await supabase
+      .from("favorites_items")
+      .delete()
+      .eq("product_id", productId);
+    if (favoritesError) throw favoritesError;
+
+    const { error: deleteError } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", productId);
+    if (deleteError) throw deleteError;
+
+    const storageMarker = "/storage/v1/object/public/products_img/";
+    const markerIndex = product.imageUrl.indexOf(storageMarker);
+    if (markerIndex >= 0) {
+      const imagePath = decodeURIComponent(
+        product.imageUrl.slice(markerIndex + storageMarker.length),
+      );
+      const { error: storageError } = await supabase.storage
+        .from("products_img")
+        .remove([imagePath]);
+      if (storageError) {
+        console.error("Не удалось удалить изображение товара:", storageError);
+      }
+    }
+
+    return res.json({ message: "Товар удалён" });
+  } catch (error) {
+    console.error("Ошибка удаления товара:", error);
+    return res.status(500).json({ error: "Не удалось удалить товар" });
   }
 });
 

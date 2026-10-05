@@ -16,6 +16,7 @@ import {
 import "./i18n";
 import { useAuthStore } from "./store/authStore";
 import RegisterPage from "./pages/RegisterPage";
+import AdminPage from "./pages/AdminPage";
 
 function App() {
   const initializeAuth = useAuthStore((state) => state.initializeAuth);
@@ -46,6 +47,8 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+
+          <Route path="/admin" element={<AdminPage />} />
 
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

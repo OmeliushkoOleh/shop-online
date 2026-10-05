@@ -15,9 +15,10 @@ const ProfilePage = () => {
   const [phoneError, setPhoneError] = useState("");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(user?.user_metadata?.name ?? "");
     setPhone(user?.user_metadata?.phone ?? "");
-  }, [user]);
+  }, [user?.user_metadata?.name, user?.user_metadata?.phone]);
 
   const handleSubmitName = async () => {
     const trimmedName = name.trim();
